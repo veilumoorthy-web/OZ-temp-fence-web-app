@@ -11,12 +11,38 @@ const quickReplies = [
   'Your delivery is confirmed — thank you!',
 ]
 
+const gmailSuggestions = [
+  `Hi,
+
+Thank you for contacting OZ Temp Fencing.
+
+To prepare your quote, please reply with the following information:
+
+1. Site Address:
+2. Installation Date:
+3. Pickup/Removal Date:
+4. Approximate Fence Length (metres):
+5. Purpose of the Fence (Construction / Event / Pool Safety / Other):
+6. Is Gate or Pedestrian Access Required? (Yes/No)
+7. Ground Surface (Grass / Concrete / Dirt / Gravel / Other):
+8. Onsite Contact Name:
+9. Email Address:
+10. Phone Number:
+
+Once we receive these details, we'll prepare your quote and get back to you as soon as possible.
+
+Kind regards,
+
+OZ Temp Fencing Team`,
+]
+
 export default function CaseDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { cases, updateCase, addMessage, loading, error } = useCases()
   const [tab, setTab] = useState('Activity')
-  const [replyMode, setReplyMode] = useState('Reply to customer')
+  const isEmailChannel = (cases || []).find((x) => x.id === id)?.channel === 'email'
+  const [replyMode, setReplyMode] = useState(isEmailChannel ? 'Reply via Gmail' : 'Reply to customer')
   const [draft, setDraft] = useState('')
   const [saved, setSaved] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -40,33 +66,90 @@ export default function CaseDetail() {
   const postReply = async () => {
     const text = draft.trim()
     if (!text) return
+
     const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+    // ── Email reply (Reply via Gmail) ─────────────────────────────────────────
+    if (replyMode === 'Reply via Gmail') {
+      setIsSending(true)
+      try {
+        const webhookUrl = import.meta.env.VITE_N8N_EMAIL_REPLY_WEBHOOK
+        if (!webhookUrl) {
+          throw new Error('Email webhook URL is not configured (VITE_N8N_EMAIL_REPLY_WEBHOOK)')
+        }
+
+        const payload = {
+          caseId: c.id,
+          reply: text,
+          agent: 'Agent',
+          channel: 'email',
+        }
+
+        let res
+        try {
+          res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        } catch (networkErr) {
+          throw new Error(`Network error: ${networkErr.message}`)
+        }
+
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status} ${res.statusText}`)
+        }
+
+        // Success — update UI and clear draft
+        addMessage(c.id, { from: 'agent', text, time })
+        setDraft('')
+        setToast({ type: 'success', message: 'Email reply sent successfully!' })
+      } catch (err) {
+        console.error('[Email Reply]', err)
+        // Draft is intentionally NOT cleared on failure
+        setToast({ type: 'error', message: `Failed to send email reply: ${err.message}` })
+      } finally {
+        setIsSending(false)
+        setTimeout(() => setToast(null), 4000)
+      }
+      return
+    }
+
+    // ── WhatsApp / other channel reply (Reply to customer) ───────────────────
     if (replyMode === 'Reply to customer') {
       setIsSending(true)
       try {
-        const webhookUrl = import.meta.env.VITE_N8N_REPLY_WEBHOOK;
+        const webhookUrl = import.meta.env.VITE_N8N_REPLY_WEBHOOK
         if (!webhookUrl) {
-          throw new Error('Webhook URL not configured');
+          throw new Error('Webhook URL not configured')
         }
 
-        const res = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            caseId: c.id,
-            customerId: c.customer,
-            phone: c.phone,
-            customerName: c.customer,
-            message: text,
-            agent: 'Current Agent',
-            timestamp: new Date().toISOString()
+        const payload = {
+          caseId: c.id,
+          customerId: c.customer,
+          phone: c.phone,
+          customerName: c.customer,
+          message: text,
+          agent: 'Current Agent',
+          channel: c.channel || 'whatsapp',
+          timestamp: new Date().toISOString(),
+        }
+
+        let res
+        try {
+          res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
           })
-        })
-        
+        } catch (networkErr) {
+          throw new Error(`Network error: ${networkErr.message}`)
+        }
+
         if (!res.ok) {
           throw new Error('Failed to send')
         }
-        
+
         addMessage(c.id, { from: 'agent', text, time })
         setDraft('')
         setToast({ type: 'success', message: 'Reply sent successfully!' })
@@ -77,11 +160,14 @@ export default function CaseDetail() {
         setIsSending(false)
         setTimeout(() => setToast(null), 3000)
       }
-    } else {
-      addMessage(c.id, { from: 'note', text, time })
-      setDraft('')
+      return
     }
+
+    // ── Work note ─────────────────────────────────────────────────────────────
+    addMessage(c.id, { from: 'note', text, time })
+    setDraft('')
   }
+
 
   const onSave = () => {
     setSaved(true)
@@ -163,11 +249,19 @@ export default function CaseDetail() {
         {tab === 'Activity' ? (
           <div className="activity-panel">
             <div className="reply-mode-tabs">
+              {c.channel !== 'email' && (
+                <button
+                  className={replyMode === 'Reply to customer' ? 'reply-tab-active' : ''}
+                  onClick={() => setReplyMode('Reply to customer')}
+                >
+                  Reply to customer
+                </button>
+              )}
               <button
-                className={replyMode === 'Reply to customer' ? 'reply-tab-active' : ''}
-                onClick={() => setReplyMode('Reply to customer')}
+                className={replyMode === 'Reply via Gmail' ? 'reply-tab-active' : ''}
+                onClick={() => setReplyMode('Reply via Gmail')}
               >
-                Reply to customer
+                Reply via Gmail
               </button>
               <button
                 className={replyMode === 'Work note' ? 'reply-tab-active' : ''}
@@ -176,27 +270,40 @@ export default function CaseDetail() {
                 Work note
               </button>
             </div>
-            <div className="reply-input-row">
+            <div className="reply-input-row reply-input-row--gmail">
               <span className="phone-clip">📎</span>
-              <input
-                placeholder="Write a message... (Enter to send, Shift+Enter for new line)"
+              <textarea
+                className={replyMode === 'Reply via Gmail' ? 'reply-textarea reply-textarea--gmail' : 'reply-textarea'}
+                placeholder="Write a message... (Enter for new line, click Post reply to send)"
                 value={draft}
+                rows={replyMode === 'Reply via Gmail' ? 6 : 2}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) postReply()
+                  if (e.key === 'Enter' && !e.shiftKey && replyMode !== 'Reply via Gmail') postReply()
                 }}
               />
               <button className="btn-primary" onClick={postReply} disabled={isSending}>
                 {isSending ? 'Sending...' : 'Post reply'}
               </button>
             </div>
-            <div className="quick-replies">
-              {quickReplies.map((q) => (
-                <button key={q} className="quick-reply-chip" onClick={() => setDraft(q)}>
-                  {q}
-                </button>
-              ))}
-            </div>
+            {replyMode === 'Reply via Gmail' ? (
+              <div className="quick-replies quick-replies--gmail">
+                <span className="quick-replies-label">✉️ Gmail suggestions:</span>
+                {gmailSuggestions.map((q, i) => (
+                  <button key={i} className="quick-reply-chip quick-reply-chip--gmail" onClick={() => setDraft(q)}>
+                    Quote request template
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="quick-replies">
+                {quickReplies.map((q) => (
+                  <button key={q} className="quick-reply-chip" onClick={() => setDraft(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="activity-feed">
               {[...c.messages].reverse().map((m, i) => (
@@ -222,7 +329,49 @@ export default function CaseDetail() {
           </div>
         ) : (
           <div className="related-orders-panel">
-            <p className="muted">No related orders linked to this case yet.</p>
+            {(!c.relatedOrders || c.relatedOrders.length === 0) ? (
+              <p className="muted">No related orders linked to this case yet.</p>
+            ) : (
+              <div className="orders-table-wrap">
+                <p className="orders-count muted">{c.relatedOrders.length} order{c.relatedOrders.length !== 1 ? 's' : ''} found for {c.phone}</p>
+                <table className="orders-table">
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Date</th>
+                      <th>Amount</th>
+                      <th>Payment</th>
+                      <th>Payment Status</th>
+                      <th>Order Status</th>
+                      <th>Invoice No</th>
+                      <th>Shipping Address</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {c.relatedOrders.map((order, idx) => (
+                      <tr key={order['Order ID'] || idx}>
+                        <td><span className="order-id-badge">{order['Order ID']}</span></td>
+                        <td>{order['Order Date']}</td>
+                        <td className="order-amount">{order['Amount']}</td>
+                        <td>{order['Payment Method']}</td>
+                        <td>
+                          <span className={`order-status-badge pay-${(order['Payment Status'] || '').toLowerCase()}`}>
+                            {order['Payment Status']}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`order-status-badge ord-${(order['Order Status'] || '').toLowerCase().replace(/\s+/g, '-')}`}>
+                            {order['Order Status']}
+                          </span>
+                        </td>
+                        <td>{order['Invoice No']}</td>
+                        <td className="order-address">{order['Shipping Address'] === 'Same as Billing' ? order['Billing Address'] : order['Shipping Address']}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -15,6 +15,8 @@ export function CasesProvider({ children }) {
         const sheetId = import.meta.env.VITE_SPREADSHEET_ID;
         const casesRange = "'Customer Details'!A1:Z1000";
         const msgsRange = "'Messages'!A1:Z1000";
+        const gmailRange = "'gmail'!A1:Z1000";
+        const ordersRange = "Sheet6!A1:Z1000";
         
         if (!apiKey || !sheetId) {
           console.warn("⚠️ Missing Google Sheets API Key or ID. Cases will be empty.");
@@ -22,22 +24,43 @@ export function CasesProvider({ children }) {
           return;
         }
 
-        const [casesRes, msgsRes] = await Promise.all([
+        const [casesRes, msgsRes, gmailRes, ordersRes] = await Promise.all([
           fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${casesRange}?key=${apiKey}`),
-          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${msgsRange}?key=${apiKey}`)
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${msgsRange}?key=${apiKey}`),
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${gmailRange}?key=${apiKey}`).catch(() => ({ ok: false })),
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${ordersRange}?key=${apiKey}`).catch(() => ({ ok: false }))
         ]);
 
         if (!casesRes.ok || !msgsRes.ok) throw new Error("Failed to fetch from Google Sheets");
 
         const casesData = await casesRes.json();
         const msgsData = await msgsRes.json();
+        const gmailData = gmailRes.ok ? await gmailRes.json() : { values: [] };
+        const ordersData = ordersRes.ok ? await ordersRes.json() : { values: [] };
 
-        // Process Messages
+        // Process Sheet6 Orders — index by normalized phone
+        const normalizePhone = (p) => (p || '').replace(/\D/g, '').replace(/^91/, '').slice(-10);
+        const ordersRows = ordersData.values || [];
+        const orderHeaders = ordersRows[0] || [];
+        const allOrders = ordersRows.slice(1).map(row => {
+          const obj = {};
+          orderHeaders.forEach((h, i) => { obj[h.trim()] = (row[i] || '').toString().trim(); });
+          return obj;
+        });
+        const ordersByPhone = {};
+        allOrders.forEach(order => {
+          const phone = normalizePhone(order['Phone']);
+          if (!phone || phone.length < 5) return;
+          if (!ordersByPhone[phone]) ordersByPhone[phone] = [];
+          ordersByPhone[phone].push(order);
+        });
+
+        // Process Messages — all header keys are trimmed on load
         const msgsRows = msgsData.values || [];
         const msgHeaders = msgsRows[0] || [];
         const allMessages = msgsRows.slice(1).map(row => {
           const obj = {};
-          msgHeaders.forEach((h, i) => obj[h.trim()] = row[i]); // Trim headers to avoid 'Chat Id ' issues
+          msgHeaders.forEach((h, i) => { obj[h.trim()] = (row[i] || '').toString().trim(); });
           return obj;
         });
 
@@ -45,9 +68,10 @@ export function CasesProvider({ children }) {
         let lastSeenChatId = null;
 
         allMessages.forEach(m => {
+          // After trimming, header is 'Chat Id' (no trailing space)
           let cid = m['Chat Id'];
-          
-          if (!cid || cid.includes('undefined')) {
+
+          if (!cid || cid.toLowerCase().includes('undefined') || cid === '') {
             cid = lastSeenChatId;
           } else {
             lastSeenChatId = cid;
@@ -55,37 +79,91 @@ export function CasesProvider({ children }) {
 
           if (!cid) return;
           if (!msgsByChatId[cid]) msgsByChatId[cid] = [];
-          
+
+          // 'time' header trimmed — value may be unix timestamp or ISO string
           let timeStr = m['time'] || '';
-          if (timeStr && !isNaN(timeStr)) {
-            timeStr = new Date(parseInt(timeStr) * 1000).toLocaleString();
+          if (timeStr && /^\d{9,13}$/.test(timeStr)) {
+            // Unix timestamp — seconds if 10 digits, ms if 13
+            const ms = timeStr.length === 13 ? parseInt(timeStr) : parseInt(timeStr) * 1000;
+            timeStr = new Date(ms).toLocaleString();
+          } else if (timeStr && timeStr.includes('T')) {
+            timeStr = new Date(timeStr).toLocaleString();
           }
 
           msgsByChatId[cid].push({
-            id: m['message id'],
+            id: m['message id'],   // trimmed from ' message id'
             from: (m['sender'] || '').toLowerCase() === 'agent' ? 'agent' : 'customer',
             text: m['message'] || '',
-            time: timeStr || m['time']
+            time: timeStr
+          });
+        });
+
+        // Process Gmail
+        const gmailRows = gmailData.values || [];
+        const gmailHeaders = gmailRows[0] || [];
+        const gmailMessages = gmailRows.slice(1).map(row => {
+          const obj = {};
+          gmailHeaders.forEach((h, i) => obj[h.trim()] = row[i]);
+          return obj;
+        });
+
+        const gmailByCaseId = {};
+        gmailMessages.forEach(m => {
+          const caseId = m['Case ID'];
+          if (!caseId) return;
+          if (!gmailByCaseId[caseId]) gmailByCaseId[caseId] = [];
+          
+          let timeStr = m['Received Time'] || '';
+          if (timeStr && timeStr.includes('T')) {
+            timeStr = new Date(timeStr).toLocaleString();
+          }
+
+          gmailByCaseId[caseId].push({
+            id: m['Message ID'],
+            from: 'customer', // Assuming fetched emails are from customer initially
+            text: `[Subject: ${m['Subject'] || 'No Subject'}]\n${m['Body'] || ''}`,
+            time: timeStr || m['Received Time'],
+            customerName: m['Customer Name'],
+            customerEmail: m['Customer Email'],
+            status: m['Status']
           });
         });
 
         const rows = casesData.values;
+        const allFormattedCases = [];
+        const caseIdsSet = new Set();
 
         if (rows && rows.length > 1) {
           const headers = rows[0];
           const formattedData = rows.slice(1).map((row, index) => {
             const rawObj = {};
             headers.forEach((header, i) => {
-              rawObj[header.trim()] = row[i]; // Trim to avoid 'number ' issues
+              // Trim both the key and value to eliminate surrounding spaces
+              rawObj[header.trim()] = (row[i] || '').toString().trim();
             });
-            
+
+            // 'number ' trimmed → 'number'
             const phone = rawObj['number'] || 'Unknown Phone';
             const chatId = `CHAT-${phone}`;
+            const caseId = rawObj['unique number'] || `case-${index + 1000}`;
+            
             const customerMsgs = msgsByChatId[chatId] || [];
-            const lastMsg = customerMsgs.length > 0 ? customerMsgs[customerMsgs.length - 1] : null;
+            const gmailMsgs = gmailByCaseId[caseId] || [];
+            
+            // Combine and sort messages by time
+            const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
+               return new Date(a.time) - new Date(b.time);
+            });
+            
+            const lastMsg = combinedMsgs.length > 0 ? combinedMsgs[combinedMsgs.length - 1] : null;
+
+            caseIdsSet.add(caseId);
+
+            const normalizedPhone = normalizePhone(phone);
+            const relatedOrders = ordersByPhone[normalizedPhone] || [];
 
             return {
-              id: rawObj['unique number'] || `case-${index + 1000}`,
+              id: caseId,
               customer: rawObj['Name'] || 'Unknown Customer',
               phone: phone,
               email: rawObj['gmail'] || '',
@@ -99,15 +177,43 @@ export function CasesProvider({ children }) {
               unread: 0,
               lastMessage: lastMsg ? lastMsg.text : '',
               lastMessageTime: lastMsg ? lastMsg.time : '',
-              messages: customerMsgs,
+              messages: combinedMsgs,
+              relatedOrders,
               // Include the original data just in case
               ...rawObj
             };
           });
-          setCases(formattedData);
-        } else {
-          setCases([]);
+          allFormattedCases.push(...formattedData);
         }
+
+        // Add Gmail cases that are not in Customer Details
+        Object.keys(gmailByCaseId).forEach(caseId => {
+          if (!caseIdsSet.has(caseId)) {
+            const gmailMsgs = gmailByCaseId[caseId];
+            const firstMsg = gmailMsgs[0];
+            const lastMsg = gmailMsgs[gmailMsgs.length - 1];
+            
+            allFormattedCases.push({
+              id: caseId,
+              customer: firstMsg.customerName || 'Unknown Email Customer',
+              phone: '',
+              email: firstMsg.customerEmail || '',
+              status: 'New',
+              assignee: 'Unassigned',
+              priority: '3 - Moderate',
+              channel: 'email',
+              opened: firstMsg.time || 'Recently',
+              customerSince: firstMsg.time || 'New',
+              shortDescription: `Email: ${firstMsg.text.substring(0, 50)}...`,
+              unread: 0,
+              lastMessage: lastMsg ? lastMsg.text : '',
+              lastMessageTime: lastMsg ? lastMsg.time : '',
+              messages: gmailMsgs,
+            });
+          }
+        });
+
+        setCases(allFormattedCases);
       } catch (err) {
         console.error("Google Sheets API Error:", err);
         setError(err.message);

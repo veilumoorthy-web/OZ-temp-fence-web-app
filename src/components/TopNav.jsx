@@ -15,8 +15,8 @@ export default function TopNav() {
         <NavLink to="/inbox" className={({ isActive }) => (isActive ? 'active' : '')}>
           Case inbox
         </NavLink>
-        <NavLink to="/case/OTF-1041" className={({ isActive }) => (isActive ? 'active' : '')}>
-          Case detail
+        <NavLink to="/gmail-inbox" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Gmail inbox
         </NavLink>
         <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>
           Analytics
