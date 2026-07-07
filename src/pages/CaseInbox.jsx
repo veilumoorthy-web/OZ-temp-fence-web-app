@@ -21,7 +21,9 @@ export default function CaseInbox() {
   const filtered = useMemo(() => {
     const list = safeCases
       .filter((c) => {
-        const matchesFilter = filter === 'All' || c.status === filter
+        const matchesFilter = filter === 'All' 
+          ? (c.assignee === 'Unassigned' || !c.assignee) 
+          : c.status === filter
         const q = query.trim().toLowerCase()
         const matchesQuery =
           !q ||
