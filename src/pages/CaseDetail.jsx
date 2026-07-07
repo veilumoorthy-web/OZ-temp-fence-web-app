@@ -445,14 +445,21 @@ function FieldRO({ label, value, dot, avatar, children }) {
 function WaWindowRow({ c }) {
   const isWhatsApp = (c.channel || '').toLowerCase().includes('whatsapp')
 
-  // Find the last INBOUND (customer) message timestamp
-  const lastCustomerMsg = [...(c.messages || [])]
-    .reverse()
-    .find((m) => m.from === 'customer')
-
-  const openedTs = lastCustomerMsg
-    ? (lastCustomerMsg.timestamp || new Date(lastCustomerMsg.time).getTime())
-    : null
+  // Calculate the window start time based on 24-hour sessions
+  const customerMsgs = (c.messages || []).filter((m) => m.from === 'customer')
+  
+  let openedTs = null
+  for (const msg of customerMsgs) {
+    const msgTime = msg.timestamp || new Date(msg.time).getTime()
+    if (!openedTs) {
+      openedTs = msgTime
+    } else {
+      // If this message arrived after the current 24h window expired, it starts a new window
+      if (msgTime > openedTs + 24 * 60 * 60 * 1000) {
+        openedTs = msgTime
+      }
+    }
+  }
 
   const expiryTs = openedTs ? openedTs + 24 * 60 * 60 * 1000 : null
 
