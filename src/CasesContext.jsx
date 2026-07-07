@@ -90,21 +90,24 @@ export function CasesProvider({ children }) {
           if (!cid) return;
           if (!msgsByChatId[cid]) msgsByChatId[cid] = [];
 
-          // 'time' header trimmed — value may be unix timestamp or ISO string
           let timeStr = m['time'] || '';
+          let timestamp = 0;
           if (timeStr && /^\d{9,13}$/.test(timeStr)) {
-            // Unix timestamp — seconds if 10 digits, ms if 13
-            const ms = timeStr.length === 13 ? parseInt(timeStr) : parseInt(timeStr) * 1000;
-            timeStr = new Date(ms).toLocaleString();
-          } else if (timeStr && timeStr.includes('T')) {
-            timeStr = new Date(timeStr).toLocaleString();
+            timestamp = timeStr.length === 13 ? parseInt(timeStr) : parseInt(timeStr) * 1000;
+            timeStr = new Date(timestamp).toLocaleString();
+          } else if (timeStr) {
+            timestamp = new Date(timeStr).getTime();
+            if (timeStr.includes('T')) {
+              timeStr = new Date(timestamp).toLocaleString();
+            }
           }
 
           msgsByChatId[cid].push({
             id: m['message id'],   // trimmed from ' message id'
             from: (m['sender'] || '').toLowerCase() === 'agent' ? 'agent' : 'customer',
             text: m['message'] || '',
-            time: timeStr
+            time: timeStr,
+            timestamp: timestamp || Date.now()
           });
         });
 
@@ -124,8 +127,12 @@ export function CasesProvider({ children }) {
           if (!gmailByCaseId[caseId]) gmailByCaseId[caseId] = [];
           
           let timeStr = m['Received Time'] || '';
-          if (timeStr && timeStr.includes('T')) {
-            timeStr = new Date(timeStr).toLocaleString();
+          let timestamp = 0;
+          if (timeStr) {
+            timestamp = new Date(timeStr).getTime();
+            if (timeStr.includes('T')) {
+              timeStr = new Date(timestamp).toLocaleString();
+            }
           }
 
           gmailByCaseId[caseId].push({
@@ -133,6 +140,7 @@ export function CasesProvider({ children }) {
             from: 'customer', // Assuming fetched emails are from customer initially
             text: `[Subject: ${m['Subject'] || 'No Subject'}]\n${m['Body'] || ''}`,
             time: timeStr || m['Received Time'],
+            timestamp: timestamp || Date.now(),
             customerName: m['Customer Name'],
             customerEmail: m['Customer Email'],
             status: m['Status']
@@ -169,7 +177,7 @@ export function CasesProvider({ children }) {
 
             // Combine and sort messages by time
             const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
-               return new Date(a.time) - new Date(b.time);
+               return (a.timestamp || 0) - (b.timestamp || 0);
             });
 
             const lastMsg = combinedMsgs.length > 0 ? combinedMsgs[combinedMsgs.length - 1] : null;
@@ -205,6 +213,7 @@ export function CasesProvider({ children }) {
               unread: 0,
               lastMessage: lastMsg ? lastMsg.text : '',
               lastMessageTime: lastMsg ? lastMsg.time : '',
+              lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
               messages: combinedMsgs,
               relatedOrders,
               // Include the original data just in case
@@ -239,6 +248,7 @@ export function CasesProvider({ children }) {
               unread: 0,
               lastMessage: lastMsg ? lastMsg.text : '',
               lastMessageTime: lastMsg ? lastMsg.time : '',
+              lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
               messages: gmailMsgs,
             });
           }

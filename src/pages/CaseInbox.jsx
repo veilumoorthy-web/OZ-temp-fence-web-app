@@ -30,10 +30,10 @@ export default function CaseInbox() {
           c.id?.toLowerCase().includes(q)
         return matchesFilter && matchesQuery
       })
-    // Sort by most recent first — based on lastMessageTime
+    // Sort by most recent first — based on robust timestamp
     return [...list].sort((a, b) => {
-      const timeA = new Date(a.lastMessageTime).getTime() || parseInt((a.id || '').replace(/\D/g, ''), 10) || 0
-      const timeB = new Date(b.lastMessageTime).getTime() || parseInt((b.id || '').replace(/\D/g, ''), 10) || 0
+      const timeA = a.lastMessageTimestamp || 0
+      const timeB = b.lastMessageTimestamp || 0
       return timeB - timeA
     })
   }, [safeCases, filter, query])
