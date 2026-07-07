@@ -38,6 +38,29 @@ export function CasesProvider({ children }) {
         const gmailData = gmailRes.ok ? await gmailRes.json() : { values: [] };
         const ordersData = ordersRes.ok ? await ordersRes.json() : { values: [] };
 
+        // Helpers for date formatting
+        function formatDateAndTime(dateStr) {
+          if (!dateStr || dateStr === 'Recently' || dateStr === 'New') return dateStr;
+          try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+          } catch (e) {
+            return dateStr;
+          }
+        }
+
+        function formatDateOnly(dateStr) {
+          if (!dateStr || dateStr === 'Recently' || dateStr === 'New') return dateStr;
+          try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr;
+            return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } catch (e) {
+            return dateStr;
+          }
+        }
+
         // Process Sheet6 Orders — index by normalized phone AND by email
         const normalizePhone = (p) => (p || '').replace(/\D/g, '').replace(/^91/, '').slice(-10);
         const normalizeEmail = (e) => (e || '').trim().toLowerCase();
@@ -207,8 +230,8 @@ export function CasesProvider({ children }) {
               assignee: 'Unassigned',
               priority: '3 - Moderate',
               channel: rawObj['channel'] || 'Unknown',
-              opened: rawObj['starting data'] || 'Recently',
-              customerSince: rawObj['starting data'] || 'New',
+              opened: formatDateAndTime(rawObj['starting data'] || 'Recently'),
+              customerSince: formatDateOnly(rawObj['starting data'] || 'New'),
               shortDescription: 'No description',
               unread: 0,
               lastMessage: lastMsg ? lastMsg.text : '',
@@ -242,8 +265,8 @@ export function CasesProvider({ children }) {
               assignee: 'Unassigned',
               priority: '3 - Moderate',
               channel: 'email',
-              opened: firstMsg.time || 'Recently',
-              customerSince: firstMsg.time || 'New',
+              opened: formatDateAndTime(firstMsg.time || 'Recently'),
+              customerSince: formatDateOnly(firstMsg.time || 'New'),
               shortDescription: `Email: ${firstMsg.text.substring(0, 50)}...`,
               unread: 0,
               lastMessage: lastMsg ? lastMsg.text : '',
