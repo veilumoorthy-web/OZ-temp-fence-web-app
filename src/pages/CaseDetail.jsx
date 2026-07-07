@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useCases } from '../CasesContext.jsx'
 import { colorForName, initials, statuses, priorities, assignees } from '../data'
@@ -47,6 +47,15 @@ export default function CaseDetail() {
   const [saved, setSaved] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [toast, setToast] = useState(null)
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [subject, setSubject] = useState('')
+
+  useEffect(() => {
+    const c = (cases || []).find((x) => x.id === id)
+    if (c?.email && !customerEmail) {
+      setCustomerEmail(c.email)
+    }
+  }, [cases, id, customerEmail])
 
   if (loading) return <div style={{ padding: 20 }}>Loading...</div>
   if (error) return <div style={{ padding: 20 }}>Error: {error}</div>
@@ -83,6 +92,8 @@ export default function CaseDetail() {
           reply: text,
           agent: 'Agent',
           channel: 'email',
+          customerEmail,
+          subject,
         }
 
         let res
@@ -169,9 +180,35 @@ export default function CaseDetail() {
   }
 
 
-  const onSave = () => {
+  const onSave = async () => {
+    try {
+      const webhookUrl = import.meta.env.VITE_N8N_SAVE_CASE_WEBHOOK
+      if (webhookUrl) {
+        const payload = {
+          caseId: c.id,
+          status: c.status,
+          priority: c.priority,
+          assignee: c.assignee,
+          shortDescription: c.shortDescription
+        }
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error('Network response was not ok')
+      }
+    } catch (err) {
+      console.error('Failed to save to webhook', err)
+      setToast({ type: 'error', message: 'Failed to save changes to server' })
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
+    setToast({ type: 'success', message: 'Case details saved successfully!' })
+    setTimeout(() => setToast(null), 3000)
   }
 
   return (
@@ -219,7 +256,11 @@ export default function CaseDetail() {
             <FieldRO label="Number" value={c.id} />
             <FieldRO label="Channel" value={c.channel} dot />
             <FieldRO label="Customer" value={c.customer} avatar />
-            <FieldRO label="Phone" value={c.phone} />
+            {c.channel === 'email' ? (
+              <FieldRO label="Email" value={c.email} />
+            ) : (
+              <FieldRO label="Phone" value={c.phone} />
+            )}
             <FieldSelect label="State" value={c.status} options={statuses} onChange={(v) => field('status', v)} />
             <FieldSelect label="Priority" value={c.priority} options={priorities} onChange={(v) => field('priority', v)} />
             <FieldRO label="Assignment group" value="Field operations" />
@@ -270,6 +311,7 @@ export default function CaseDetail() {
               </button>
 
             </div>
+
             <div className="reply-input-row reply-input-row--gmail">
               <span className="phone-clip"></span>
               <textarea
