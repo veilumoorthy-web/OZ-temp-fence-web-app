@@ -265,8 +265,10 @@ export default function CaseDetail() {
             <FieldSelect label="Priority" value={c.priority} options={priorities} onChange={(v) => field('priority', v)} />
             <FieldRO label="Assignment group" value="Field operations" />
             <FieldSelect label="Assigned to" value={c.assignee} options={assignees} onChange={(v) => field('assignee', v)} />
-            <FieldRO label="Opened" value={c.opened} />
-            <FieldRO label="Customer since" value={c.customerSince} />
+            {/* WhatsApp 24-hr window row — full-width span inside the 2-col grid */}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <WaWindowRow c={c} />
+            </div>
           </div>
           <div className="field field-full">
             <label>Work note</label>
@@ -423,7 +425,7 @@ export default function CaseDetail() {
   )
 }
 
-function FieldRO({ label, value, dot, avatar }) {
+function FieldRO({ label, value, dot, avatar, children }) {
   return (
     <div className="field">
       <label>{label}</label>
@@ -434,8 +436,88 @@ function FieldRO({ label, value, dot, avatar }) {
             {initials(value)}
           </span>
         )}
-        {value}
+        {children || value}
       </div>
+    </div>
+  )
+}
+
+function WaWindowRow({ c }) {
+  const isWhatsApp = (c.channel || '').toLowerCase().includes('whatsapp')
+
+  // Find the last INBOUND (customer) message timestamp
+  const lastCustomerMsg = [...(c.messages || [])]
+    .reverse()
+    .find((m) => m.from === 'customer')
+
+  const openedTs = lastCustomerMsg
+    ? (lastCustomerMsg.timestamp || new Date(lastCustomerMsg.time).getTime())
+    : null
+
+  const expiryTs = openedTs ? openedTs + 24 * 60 * 60 * 1000 : null
+
+  const now = Date.now()
+  const msLeft = expiryTs ? expiryTs - now : null
+
+  let statusLabel = ''
+  let statusColor = ''
+  let statusBg = ''
+  if (expiryTs) {
+    if (msLeft <= 0) {
+      statusLabel = 'Closed'
+      statusColor = '#991b1b'
+      statusBg = '#fee2e2'
+    } else if (msLeft < 60 * 60 * 1000) {
+      statusLabel = 'Closing Soon'
+      statusColor = '#92400e'
+      statusBg = '#fef3c7'
+    } else {
+      statusLabel = 'Open'
+      statusColor = '#065f46'
+      statusBg = '#d1fae5'
+    }
+  }
+
+  const formatExpiry = (ts) => {
+    if (!ts) return '—'
+    return new Date(ts).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    })
+  }
+
+  return (
+    <div className="fields-row-4">
+      {isWhatsApp ? (
+        <>
+          <FieldRO label="WhatsApp Window Opened" value={formatExpiry(openedTs)} />
+          <FieldRO label="WhatsApp Window Expires" value={formatExpiry(expiryTs)} />
+          <FieldRO label="WhatsApp Window Status">
+            {expiryTs ? (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 10px',
+                borderRadius: 99,
+                fontSize: 13,
+                fontWeight: 600,
+                background: statusBg,
+                color: statusColor,
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+                {statusLabel}
+              </span>
+            ) : '—'}
+          </FieldRO>
+        </>
+      ) : (
+        <>
+          <FieldRO label="Opened" value={c.opened} />
+          <div style={{ gridColumn: 'span 2' }} />
+        </>
+      )}
+      <FieldRO label="Customer since" value={c.customerSince} />
     </div>
   )
 }
