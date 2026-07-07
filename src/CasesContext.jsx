@@ -288,7 +288,14 @@ export function CasesProvider({ children }) {
       }
     };
 
+    // Fetch immediately on mount
     fetchCases();
+
+    // Then automatically fetch every 30 seconds to keep data fresh
+    const intervalId = setInterval(fetchCases, 30000);
+
+    // Cleanup on unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   const updateCase = useCallback((id, updates) => {
