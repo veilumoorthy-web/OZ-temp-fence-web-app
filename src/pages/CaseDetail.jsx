@@ -352,7 +352,7 @@ export default function CaseDetail() {
             )}
 
             <div className="activity-feed">
-              {[...c.messages].reverse().map((m, i) => (
+              {[...c.messages].reverse().filter(m => m.text && m.text.trim() !== '').map((m, i) => (
                 <div key={i} className="activity-item">
                   <span
                     className="avatar avatar-sm"

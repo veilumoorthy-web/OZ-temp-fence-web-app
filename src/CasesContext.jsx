@@ -111,11 +111,6 @@ export function CasesProvider({ children }) {
           }
 
           if (!cid) return;
-          
-          // Skip completely empty/dummy rows
-          if (!m['message'] && !m['time']) return;
-          if (m['message'] && m['message'].trim() === '') return;
-
           if (!msgsByChatId[cid]) msgsByChatId[cid] = [];
 
           let timeStr = m['time'] || '';
@@ -203,12 +198,12 @@ export function CasesProvider({ children }) {
             const customerMsgs = msgsByChatId[chatId] || [];
             const gmailMsgs = gmailByCaseId[caseId] || [];
 
-            // Combine and sort messages by time
             const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
               return (a.timestamp || 0) - (b.timestamp || 0);
             });
 
             const lastMsg = combinedMsgs.length > 0 ? combinedMsgs[combinedMsgs.length - 1] : null;
+            const lastNonEmptyMsg = [...combinedMsgs].reverse().find(m => m.text && m.text.trim() !== '') || lastMsg;
 
             caseIdsSet.add(caseId);
 
@@ -239,8 +234,8 @@ export function CasesProvider({ children }) {
               customerSince: formatDateOnly(rawObj['starting data'] || 'New'),
               shortDescription: 'No description',
               unread: 0,
-              lastMessage: lastMsg ? lastMsg.text : '',
-              lastMessageTime: lastMsg ? lastMsg.time : '',
+              lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
+              lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
               lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
               messages: combinedMsgs,
               relatedOrders,
@@ -261,6 +256,8 @@ export function CasesProvider({ children }) {
             const firstMsg = gmailMsgs[0];
             const lastMsg = gmailMsgs[gmailMsgs.length - 1];
 
+            const lastNonEmptyMsg = [...gmailMsgs].reverse().find(m => m.text && m.text.trim() !== '') || lastMsg;
+
             allFormattedCases.push({
               id: caseId,
               customer: firstMsg.customerName || 'Unknown Email Customer',
@@ -274,8 +271,8 @@ export function CasesProvider({ children }) {
               customerSince: formatDateOnly(firstMsg.time || 'New'),
               shortDescription: `Email: ${firstMsg.text.substring(0, 50)}...`,
               unread: 0,
-              lastMessage: lastMsg ? lastMsg.text : '',
-              lastMessageTime: lastMsg ? lastMsg.time : '',
+              lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
+              lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
               lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
               messages: gmailMsgs,
             });
