@@ -111,6 +111,8 @@ export function CasesProvider({ children }) {
           }
 
           if (!cid) return;
+          if (!m['message'] && !m['time']) return; // Skip completely blank/dummy rows
+
           if (!msgsByChatId[cid]) msgsByChatId[cid] = [];
 
           let timeStr = m['time'] || '';
