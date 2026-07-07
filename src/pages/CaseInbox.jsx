@@ -30,10 +30,11 @@ export default function CaseInbox() {
           c.id?.toLowerCase().includes(q)
         return matchesFilter && matchesQuery
       })
-    // Sort by most recent first (by id descending as a proxy, or lastMessageTime)
+    // Sort by most recent first — extract numeric timestamp from id (e.g. CUS-1783071022661)
     return [...list].sort((a, b) => {
-      // Try to sort by lastMessageTime if it's a recognisable format, else keep order
-      return b.id?.localeCompare(a.id) || 0
+      const numA = parseInt((a.id || '').replace(/\D/g, ''), 10) || 0
+      const numB = parseInt((b.id || '').replace(/\D/g, ''), 10) || 0
+      return numB - numA
     })
   }, [safeCases, filter, query])
 
@@ -61,7 +62,7 @@ export default function CaseInbox() {
           </p>
         </div>
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"></span>
           <input
             placeholder="Search name, phone or case ID"
             value={query}

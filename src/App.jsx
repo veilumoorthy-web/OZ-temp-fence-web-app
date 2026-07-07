@@ -13,6 +13,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<CustomerChat />} />
+          <Route path="/chat/:caseId" element={<CustomerChat />} />
           <Route path="/inbox" element={<CaseInbox />} />
           <Route path="/gmail-inbox" element={<GmailInbox />} />
           <Route path="/case/:id" element={<CaseDetail />} />

@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useCases } from '../CasesContext.jsx'
 import { initials } from '../data'
 
 export default function CustomerChat() {
   const { cases, addMessage, loading, error } = useCases()
+  const { caseId: urlCaseId } = useParams()
+  const navigate = useNavigate()
   const [draft, setDraft] = useState('')
-  const [activeCaseId, setActiveCaseId] = useState(null)
+  const [activeCaseId, setActiveCaseId] = useState(urlCaseId || null)
   const scrollRef = useRef(null)
 
   const activeCase = cases?.find(c => c.id === activeCaseId)
@@ -97,15 +100,10 @@ export default function CustomerChat() {
 
   return (
     <div className="chat-page">
-      <p className="chat-page-note">
-        This is the customer's phone. Messages you send here appear as a live case on the admin
-        dashboard.
-      </p>
-
       <div className="phone">
         <div className="phone-notch" />
         <div className="phone-header">
-          <span className="phone-back" onClick={() => setActiveCaseId(null)} style={{ cursor: 'pointer', padding: '0 10px' }}>‹</span>
+          <span className="phone-back" onClick={() => urlCaseId ? navigate(`/case/${urlCaseId}`) : setActiveCaseId(null)} style={{ cursor: 'pointer', padding: '0 10px' }}>‹</span>
           <span className="phone-avatar" style={{ background: '#ddd', color: '#333' }}>{initials(activeCase.customer)}</span>
           <div className="phone-header-text">
             <div className="phone-title">{activeCase.customer || activeCase.phone}</div>
@@ -134,18 +132,6 @@ export default function CustomerChat() {
           ))}
         </div>
 
-        <div className="phone-input-row">
-          <span className="phone-clip">📎</span>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Type a message"
-          />
-          <button className="phone-send" onClick={send} aria-label="Send">
-            ➤
-          </button>
-        </div>
       </div>
     </div>
   )

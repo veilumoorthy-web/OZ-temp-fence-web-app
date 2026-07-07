@@ -200,6 +200,11 @@ export default function CaseDetail() {
             <button className="btn-outline" onClick={() => navigate('/inbox')}>
               Back to inbox
             </button>
+            {c.channel !== 'email' && (
+              <button className="btn-outline" onClick={() => navigate(`/chat/${c.id}`)}>
+                💬 Customer Chat
+              </button>
+            )}
             <button className="btn-primary" onClick={onSave}>
               {saved ? 'Saved ✓' : 'Save'}
             </button>
@@ -223,7 +228,7 @@ export default function CaseDetail() {
             <FieldRO label="Customer since" value={c.customerSince} />
           </div>
           <div className="field field-full">
-            <label>Short description</label>
+            <label>Work note</label>
             <input
               value={c.shortDescription}
               onChange={(e) => field('shortDescription', e.target.value)}
@@ -263,18 +268,13 @@ export default function CaseDetail() {
               >
                 Reply via Gmail
               </button>
-              <button
-                className={replyMode === 'Work note' ? 'reply-tab-active' : ''}
-                onClick={() => setReplyMode('Work note')}
-              >
-                Work note
-              </button>
+
             </div>
             <div className="reply-input-row reply-input-row--gmail">
-              <span className="phone-clip">📎</span>
+              <span className="phone-clip"></span>
               <textarea
                 className={replyMode === 'Reply via Gmail' ? 'reply-textarea reply-textarea--gmail' : 'reply-textarea'}
-                placeholder="Write a message... (Enter for new line, click Post reply to send)"
+                placeholder="Write a message"
                 value={draft}
                 rows={replyMode === 'Reply via Gmail' ? 6 : 2}
                 onChange={(e) => setDraft(e.target.value)}

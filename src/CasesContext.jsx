@@ -38,8 +38,9 @@ export function CasesProvider({ children }) {
         const gmailData = gmailRes.ok ? await gmailRes.json() : { values: [] };
         const ordersData = ordersRes.ok ? await ordersRes.json() : { values: [] };
 
-        // Process Sheet6 Orders — index by normalized phone
+        // Process Sheet6 Orders — index by normalized phone AND by email
         const normalizePhone = (p) => (p || '').replace(/\D/g, '').replace(/^91/, '').slice(-10);
+        const normalizeEmail = (e) => (e || '').trim().toLowerCase();
         const ordersRows = ordersData.values || [];
         const orderHeaders = ordersRows[0] || [];
         const allOrders = ordersRows.slice(1).map(row => {
@@ -48,11 +49,20 @@ export function CasesProvider({ children }) {
           return obj;
         });
         const ordersByPhone = {};
+        const ordersByEmail = {};
         allOrders.forEach(order => {
           const phone = normalizePhone(order['Phone']);
-          if (!phone || phone.length < 5) return;
-          if (!ordersByPhone[phone]) ordersByPhone[phone] = [];
-          ordersByPhone[phone].push(order);
+          if (phone && phone.length >= 5) {
+            if (!ordersByPhone[phone]) ordersByPhone[phone] = [];
+            ordersByPhone[phone].push(order);
+          }
+          // Try common email column names from Sheet6
+          const emailRaw = order['Email'] || order['email'] || order['Gmail'] || order['gmail'] || '';
+          const email = normalizeEmail(emailRaw);
+          if (email && email.includes('@')) {
+            if (!ordersByEmail[email]) ordersByEmail[email] = [];
+            ordersByEmail[email].push(order);
+          }
         });
 
         // Process Messages — all header keys are trimmed on load
@@ -132,10 +142,12 @@ export function CasesProvider({ children }) {
         const rows = casesData.values;
         const allFormattedCases = [];
         const caseIdsSet = new Set();
+        const seenEmails = new Set(); // track emails to avoid duplicate cases
 
         if (rows && rows.length > 1) {
           const headers = rows[0];
-          const formattedData = rows.slice(1).map((row, index) => {
+          const formattedData = [];
+          rows.slice(1).forEach((row, index) => {
             const rawObj = {};
             headers.forEach((header, i) => {
               // Trim both the key and value to eliminate surrounding spaces
@@ -146,23 +158,39 @@ export function CasesProvider({ children }) {
             const phone = rawObj['number'] || 'Unknown Phone';
             const chatId = `CHAT-${phone}`;
             const caseId = rawObj['unique number'] || `case-${index + 1000}`;
-            
+            const customerEmail = normalizeEmail(rawObj['gmail'] || '');
+
+            // Skip duplicate emails — only keep the first (latest after sorting) occurrence
+            if (customerEmail && seenEmails.has(customerEmail)) return;
+            if (customerEmail) seenEmails.add(customerEmail);
+
             const customerMsgs = msgsByChatId[chatId] || [];
             const gmailMsgs = gmailByCaseId[caseId] || [];
-            
+
             // Combine and sort messages by time
             const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
                return new Date(a.time) - new Date(b.time);
             });
-            
+
             const lastMsg = combinedMsgs.length > 0 ? combinedMsgs[combinedMsgs.length - 1] : null;
 
             caseIdsSet.add(caseId);
 
             const normalizedPhone = normalizePhone(phone);
-            const relatedOrders = ordersByPhone[normalizedPhone] || [];
 
-            return {
+            // Match orders by phone OR email — deduplicate by Order ID
+            const seenOrderIds = new Set();
+            const relatedOrders = [
+              ...(ordersByPhone[normalizedPhone] || []),
+              ...(customerEmail ? (ordersByEmail[customerEmail] || []) : [])
+            ].filter(order => {
+              const key = order['Order ID'] || JSON.stringify(order);
+              if (seenOrderIds.has(key)) return false;
+              seenOrderIds.add(key);
+              return true;
+            });
+
+            formattedData.push({
               id: caseId,
               customer: rawObj['Name'] || 'Unknown Customer',
               phone: phone,
@@ -181,14 +209,17 @@ export function CasesProvider({ children }) {
               relatedOrders,
               // Include the original data just in case
               ...rawObj
-            };
+            });
           });
           allFormattedCases.push(...formattedData);
         }
 
         // Add Gmail cases that are not in Customer Details
+        // Skip if a case with the same customer email already exists
         Object.keys(gmailByCaseId).forEach(caseId => {
-          if (!caseIdsSet.has(caseId)) {
+          const gmailMsgsCheck = gmailByCaseId[caseId];
+          const gmailEmail = normalizeEmail(gmailMsgsCheck[0]?.customerEmail || '');
+          if (!caseIdsSet.has(caseId) && (!gmailEmail || !seenEmails.has(gmailEmail))) {
             const gmailMsgs = gmailByCaseId[caseId];
             const firstMsg = gmailMsgs[0];
             const lastMsg = gmailMsgs[gmailMsgs.length - 1];
