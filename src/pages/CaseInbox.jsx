@@ -30,11 +30,11 @@ export default function CaseInbox() {
           c.id?.toLowerCase().includes(q)
         return matchesFilter && matchesQuery
       })
-    // Sort by most recent first — extract numeric timestamp from id (e.g. CUS-1783071022661)
+    // Sort by most recent first — based on lastMessageTime
     return [...list].sort((a, b) => {
-      const numA = parseInt((a.id || '').replace(/\D/g, ''), 10) || 0
-      const numB = parseInt((b.id || '').replace(/\D/g, ''), 10) || 0
-      return numB - numA
+      const timeA = new Date(a.lastMessageTime).getTime() || parseInt((a.id || '').replace(/\D/g, ''), 10) || 0
+      const timeB = new Date(b.lastMessageTime).getTime() || parseInt((b.id || '').replace(/\D/g, ''), 10) || 0
+      return timeB - timeA
     })
   }, [safeCases, filter, query])
 

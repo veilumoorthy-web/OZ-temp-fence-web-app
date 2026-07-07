@@ -303,12 +303,14 @@ export default function CaseDetail() {
                   Reply to customer
                 </button>
               )}
-              <button
-                className={replyMode === 'Reply via Gmail' ? 'reply-tab-active' : ''}
-                onClick={() => setReplyMode('Reply via Gmail')}
-              >
-                Reply via Gmail
-              </button>
+              {!c.channel?.toLowerCase().includes('whatsapp') && (
+                <button
+                  className={replyMode === 'Reply via Gmail' ? 'reply-tab-active' : ''}
+                  onClick={() => setReplyMode('Reply via Gmail')}
+                >
+                  Reply via Gmail
+                </button>
+              )}
 
             </div>
 
