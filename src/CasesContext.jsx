@@ -17,7 +17,7 @@ export function CasesProvider({ children }) {
         const msgsRange = "'Messages'!A1:Z1000";
         const gmailRange = "'gmail'!A1:Z1000";
         const ordersRange = "Sheet6!A1:Z1000";
-        
+
         if (!apiKey || !sheetId) {
           console.warn("⚠️ Missing Google Sheets API Key or ID. Cases will be empty.");
           setLoading(false);
@@ -111,7 +111,10 @@ export function CasesProvider({ children }) {
           }
 
           if (!cid) return;
-          if (!m['message'] && !m['time']) return; // Skip completely blank/dummy rows
+          
+          // Skip completely empty/dummy rows
+          if (!m['message'] && !m['time']) return;
+          if (m['message'] && m['message'].trim() === '') return;
 
           if (!msgsByChatId[cid]) msgsByChatId[cid] = [];
 
@@ -150,7 +153,7 @@ export function CasesProvider({ children }) {
           const caseId = m['Case ID'];
           if (!caseId) return;
           if (!gmailByCaseId[caseId]) gmailByCaseId[caseId] = [];
-          
+
           let timeStr = m['Received Time'] || '';
           let timestamp = 0;
           if (timeStr) {
@@ -202,7 +205,7 @@ export function CasesProvider({ children }) {
 
             // Combine and sort messages by time
             const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
-               return (a.timestamp || 0) - (b.timestamp || 0);
+              return (a.timestamp || 0) - (b.timestamp || 0);
             });
 
             const lastMsg = combinedMsgs.length > 0 ? combinedMsgs[combinedMsgs.length - 1] : null;
@@ -257,7 +260,7 @@ export function CasesProvider({ children }) {
             const gmailMsgs = gmailByCaseId[caseId];
             const firstMsg = gmailMsgs[0];
             const lastMsg = gmailMsgs[gmailMsgs.length - 1];
-            
+
             allFormattedCases.push({
               id: caseId,
               customer: firstMsg.customerName || 'Unknown Email Customer',
@@ -300,11 +303,11 @@ export function CasesProvider({ children }) {
       prev.map((c) =>
         c.id === id
           ? {
-              ...c,
-              messages: [...c.messages, message],
-              lastMessage: message.from === 'agent' ? `You: ${message.text}` : message.text,
-              lastMessageTime: message.time,
-            }
+            ...c,
+            messages: [...c.messages, message],
+            lastMessage: message.from === 'agent' ? `You: ${message.text}` : message.text,
+            lastMessageTime: message.time,
+          }
           : c
       )
     )
