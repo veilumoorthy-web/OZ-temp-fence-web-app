@@ -363,7 +363,7 @@ export default function CaseDetail() {
                       <strong>{m.from === 'agent' ? 'You' : c.customer}</strong>
                       <span className="muted">{m.time}</span>
                     </div>
-                    <div className={`activity-text ${m.from === 'note' ? 'activity-note' : ''}`}>
+                    <div className={`activity-text ${m.from === 'note' ? 'activity-note' : ''}`} style={{ whiteSpace: 'pre-wrap' }}>
                       {m.text}
                     </div>
                   </div>

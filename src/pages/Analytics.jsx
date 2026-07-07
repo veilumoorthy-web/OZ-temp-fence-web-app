@@ -209,10 +209,19 @@ function LineGraph({ data }) {
   return (
     <div style={{ width: '100%', overflowX: 'auto', padding: '20px 0 10px 0' }}>
       <svg viewBox={`0 0 ${w} ${h + 40}`} style={{ width: '100%', height: 'auto', minWidth: '500px', display: 'block' }}>
-        {/* Grid lines */}
-        {[0, 0.5, 1].map(ratio => (
-          <line key={ratio} x1={0} y1={(h - 20) * ratio + 20} x2={w} y2={(h - 20) * ratio + 20} stroke="#e5e7eb" strokeWidth="1" />
-        ))}
+        {/* Grid lines & Y-axis labels */}
+        {[0, 0.5, 1].map(ratio => {
+          const y = (h - 20) * ratio + 20;
+          const val = maxVal * (1 - ratio);
+          return (
+            <g key={ratio}>
+              <line x1={padX} y1={y} x2={w} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+              <text x={padX - 10} y={y + 4} fontSize="12" fill="#9ca3af" textAnchor="end">
+                {Math.round(val)}
+              </text>
+            </g>
+          );
+        })}
         
         {/* Customers Line */}
         <polyline points={custPoints} fill="none" stroke="#2f6fd6" strokeWidth="3" />
