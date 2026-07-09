@@ -160,7 +160,7 @@ export function CasesProvider({ children }) {
 
           gmailByCaseId[caseId].push({
             id: m['Message ID'],
-            from: 'customer', // Assuming fetched emails are from customer initially
+            from: (m['Customer Name'] === 'Agent' || m['Status'] === 'Sent' || m['Status'] === 'sent') ? 'agent' : 'customer',
             text: `[Subject: ${m['Subject'] || 'No Subject'}]\n${m['Body'] || ''}`,
             time: timeStr || m['Received Time'],
             timestamp: timestamp || Date.now(),

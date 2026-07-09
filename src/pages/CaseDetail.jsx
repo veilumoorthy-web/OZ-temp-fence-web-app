@@ -320,21 +320,33 @@ export default function CaseDetail() {
 
             </div>
 
-            <div className="reply-input-row reply-input-row--gmail">
-              <span className="phone-clip"></span>
-              <textarea
-                className={replyMode === 'Reply via Gmail' ? 'reply-textarea reply-textarea--gmail' : 'reply-textarea'}
-                placeholder="Write a message"
-                value={draft}
-                rows={replyMode === 'Reply via Gmail' ? 6 : 2}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && replyMode !== 'Reply via Gmail') postReply()
-                }}
-              />
-              <button className="btn-primary" onClick={postReply} disabled={isSending}>
-                {isSending ? 'Sending...' : 'Post reply'}
-              </button>
+            <div className={`reply-input-row ${replyMode === 'Reply via Gmail' ? 'reply-input-row--gmail-container' : ''}`} style={replyMode === 'Reply via Gmail' ? { flexDirection: 'column', alignItems: 'stretch', gap: '10px' } : {}}>
+              {replyMode === 'Reply via Gmail' && (
+                <input
+                  className="reply-subject-input"
+                  placeholder="Subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '4px', fontFamily: 'inherit' }}
+                />
+              )}
+              <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'center' }}>
+                {replyMode !== 'Reply via Gmail' && <span className="phone-clip"></span>}
+                <textarea
+                  className={replyMode === 'Reply via Gmail' ? 'reply-textarea reply-textarea--gmail' : 'reply-textarea'}
+                  placeholder="Write a message"
+                  value={draft}
+                  rows={replyMode === 'Reply via Gmail' ? 6 : 2}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && replyMode !== 'Reply via Gmail') postReply()
+                  }}
+                  style={replyMode === 'Reply via Gmail' ? { flex: 1, resize: 'vertical' } : {}}
+                />
+                <button className="btn-primary" onClick={postReply} disabled={isSending}>
+                  {isSending ? 'Sending...' : 'Post reply'}
+                </button>
+              </div>
             </div>
             {replyMode === 'Reply via Gmail' ? (
               <div className="quick-replies quick-replies--gmail">
