@@ -143,11 +143,14 @@ export function CasesProvider({ children }) {
           return obj;
         });
 
-        const gmailByCaseId = {};
+        const gmailGroups = {};
         gmailMessages.forEach(m => {
+          const email = normalizeEmail(m['Customer Email']);
           const caseId = m['Case ID'];
-          if (!caseId) return;
-          if (!gmailByCaseId[caseId]) gmailByCaseId[caseId] = [];
+          if (!caseId && !email) return;
+
+          const groupKey = email ? `email:${email}` : `case:${caseId}`;
+          if (!gmailGroups[groupKey]) gmailGroups[groupKey] = [];
 
           let timeStr = m['Received Time'] || '';
           let timestamp = 0;
@@ -158,15 +161,19 @@ export function CasesProvider({ children }) {
             }
           }
 
-          gmailByCaseId[caseId].push({
-            id: m['Message ID'],
+          gmailGroups[groupKey].push({
+            id: m['Message ID'] || `msg-${Math.random()}`,
             from: (m['Customer Name'] === 'Agent' || m['Status'] === 'Sent' || m['Status'] === 'sent') ? 'agent' : 'customer',
             text: `[Subject: ${m['Subject'] || 'No Subject'}]\n${m['Body'] || ''}`,
-            time: timeStr || m['Received Time'],
+            time: timeStr || m['Received Time'] || '',
             timestamp: timestamp || Date.now(),
-            customerName: m['Customer Name'],
-            customerEmail: m['Customer Email'],
-            status: m['Status']
+            customerName: m['Customer Name'] || '',
+            customerEmail: m['Customer Email'] || '',
+            status: m['State'] || m['Status'] || '',
+            assignee: m['Assigned to'] || '',
+            priority: m['Priority'] || '',
+            workNote: m['Work note'] || '',
+            originalCaseId: caseId
           });
         });
 
@@ -181,22 +188,27 @@ export function CasesProvider({ children }) {
           rows.slice(1).forEach((row, index) => {
             const rawObj = {};
             headers.forEach((header, i) => {
-              // Trim both the key and value to eliminate surrounding spaces
               rawObj[header.trim()] = (row[i] || '').toString().trim();
             });
 
-            // 'number ' trimmed → 'number'
             const phone = rawObj['number'] || 'Unknown Phone';
             const chatId = `CHAT-${phone}`;
             const caseId = rawObj['unique number'] || `case-${index + 1000}`;
             const customerEmail = normalizeEmail(rawObj['gmail'] || '');
 
-            // Skip duplicate emails — only keep the first (latest after sorting) occurrence
             if (customerEmail && seenEmails.has(customerEmail)) return;
             if (customerEmail) seenEmails.add(customerEmail);
 
             const customerMsgs = msgsByChatId[chatId] || [];
-            const gmailMsgs = gmailByCaseId[caseId] || [];
+            
+            let gmailMsgs = [];
+            if (customerEmail && gmailGroups[`email:${customerEmail}`]) {
+              gmailMsgs = gmailGroups[`email:${customerEmail}`];
+              delete gmailGroups[`email:${customerEmail}`];
+            } else if (caseId && gmailGroups[`case:${caseId}`]) {
+              gmailMsgs = gmailGroups[`case:${caseId}`];
+              delete gmailGroups[`case:${caseId}`];
+            }
 
             const combinedMsgs = [...customerMsgs, ...gmailMsgs].sort((a, b) => {
               return (a.timestamp || 0) - (b.timestamp || 0);
@@ -208,8 +220,6 @@ export function CasesProvider({ children }) {
             caseIdsSet.add(caseId);
 
             const normalizedPhone = normalizePhone(phone);
-
-            // Match orders by phone OR email — deduplicate by Order ID
             const seenOrderIds = new Set();
             const relatedOrders = [
               ...(ordersByPhone[normalizedPhone] || []),
@@ -239,7 +249,6 @@ export function CasesProvider({ children }) {
               lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
               messages: combinedMsgs,
               relatedOrders,
-              // Include the original data just in case
               ...rawObj
             });
           });
@@ -247,36 +256,32 @@ export function CasesProvider({ children }) {
         }
 
         // Add Gmail cases that are not in Customer Details
-        // Skip if a case with the same customer email already exists
-        Object.keys(gmailByCaseId).forEach(caseId => {
-          const gmailMsgsCheck = gmailByCaseId[caseId];
-          const gmailEmail = normalizeEmail(gmailMsgsCheck[0]?.customerEmail || '');
-          if (!caseIdsSet.has(caseId) && (!gmailEmail || !seenEmails.has(gmailEmail))) {
-            const gmailMsgs = gmailByCaseId[caseId];
-            const firstMsg = gmailMsgs[0];
-            const lastMsg = gmailMsgs[gmailMsgs.length - 1];
+        Object.keys(gmailGroups).forEach(groupKey => {
+          const gmailMsgs = gmailGroups[groupKey];
+          const firstMsg = gmailMsgs[0];
+          const lastMsg = gmailMsgs[gmailMsgs.length - 1];
+          const lastNonEmptyMsg = [...gmailMsgs].reverse().find(m => m.text && m.text.trim() !== '') || lastMsg;
 
-            const lastNonEmptyMsg = [...gmailMsgs].reverse().find(m => m.text && m.text.trim() !== '') || lastMsg;
+          const caseId = firstMsg.originalCaseId || groupKey.replace('email:', 'EMAIL-');
 
-            allFormattedCases.push({
-              id: caseId,
-              customer: firstMsg.customerName || 'Unknown Email Customer',
-              phone: '',
-              email: firstMsg.customerEmail || '',
-              status: firstMsg.State || firstMsg.Status || firstMsg.status || 'New',
-              assignee: firstMsg['Assigned to'] || firstMsg.Assignee || firstMsg.assignee || 'Unassigned',
-              priority: firstMsg.Priority || firstMsg.priority || '3 - Moderate',
-              channel: 'email',
-              opened: formatDateAndTime(firstMsg.time || 'Recently'),
-              customerSince: formatDateOnly(firstMsg.time || 'New'),
-              shortDescription: firstMsg['Work note'] || firstMsg['Short Description'] || firstMsg['shortDescription'] || firstMsg.Description || firstMsg.description || `Email: ${firstMsg.text.substring(0, 50)}...`,
-              unread: 0,
-              lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
-              lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
-              lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
-              messages: gmailMsgs,
-            });
-          }
+          allFormattedCases.push({
+            id: caseId,
+            customer: firstMsg.customerName || 'Unknown Email Customer',
+            phone: '',
+            email: firstMsg.customerEmail || '',
+            status: firstMsg.status || 'New',
+            assignee: firstMsg.assignee || 'Unassigned',
+            priority: firstMsg.priority || '3 - Moderate',
+            channel: 'email',
+            opened: formatDateAndTime(firstMsg.time || 'Recently'),
+            customerSince: formatDateOnly(firstMsg.time || 'New'),
+            shortDescription: firstMsg.workNote || `Email: ${firstMsg.text.substring(0, 50).replace(/\n/g, ' ')}...`,
+            unread: 0,
+            lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
+            lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
+            lastMessageTimestamp: lastMsg ? lastMsg.timestamp : (parseInt((caseId || '').replace(/\D/g, ''), 10) || 0),
+            messages: gmailMsgs,
+          });
         });
 
         setCases(prevCases => {
