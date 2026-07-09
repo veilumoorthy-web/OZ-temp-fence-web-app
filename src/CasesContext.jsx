@@ -25,10 +25,10 @@ export function CasesProvider({ children }) {
         }
 
         const [casesRes, msgsRes, gmailRes, ordersRes] = await Promise.all([
-          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${casesRange}?key=${apiKey}`),
-          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${msgsRange}?key=${apiKey}`),
-          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${gmailRange}?key=${apiKey}`).catch(() => ({ ok: false })),
-          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${ordersRange}?key=${apiKey}`).catch(() => ({ ok: false }))
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${casesRange}?key=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${msgsRange}?key=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${gmailRange}?key=${apiKey}`, { cache: 'no-store' }).catch(() => ({ ok: false })),
+          fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${ordersRange}?key=${apiKey}`, { cache: 'no-store' }).catch(() => ({ ok: false }))
         ]);
 
         if (!casesRes.ok || !msgsRes.ok) throw new Error("Failed to fetch from Google Sheets");
@@ -226,13 +226,13 @@ export function CasesProvider({ children }) {
               customer: rawObj['Name'] || 'Unknown Customer',
               phone: phone,
               email: rawObj['gmail'] || '',
-              status: 'New',
-              assignee: 'Unassigned',
-              priority: '3 - Moderate',
+              status: rawObj['State'] || rawObj['Status'] || rawObj['status'] || 'New',
+              assignee: rawObj['Assigned to'] || rawObj['Assignee'] || rawObj['assignee'] || 'Unassigned',
+              priority: rawObj['Priority'] || rawObj['priority'] || '3 - Moderate',
               channel: rawObj['channel'] || 'Unknown',
               opened: formatDateAndTime(rawObj['starting data'] || 'Recently'),
               customerSince: formatDateOnly(rawObj['starting data'] || 'New'),
-              shortDescription: 'No description',
+              shortDescription: rawObj['Work note'] || rawObj['Short Description'] || rawObj['shortDescription'] || rawObj['Description'] || rawObj['description'] || 'No description',
               unread: 0,
               lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
               lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
@@ -263,13 +263,13 @@ export function CasesProvider({ children }) {
               customer: firstMsg.customerName || 'Unknown Email Customer',
               phone: '',
               email: firstMsg.customerEmail || '',
-              status: 'New',
-              assignee: 'Unassigned',
-              priority: '3 - Moderate',
+              status: firstMsg.State || firstMsg.Status || firstMsg.status || 'New',
+              assignee: firstMsg['Assigned to'] || firstMsg.Assignee || firstMsg.assignee || 'Unassigned',
+              priority: firstMsg.Priority || firstMsg.priority || '3 - Moderate',
               channel: 'email',
               opened: formatDateAndTime(firstMsg.time || 'Recently'),
               customerSince: formatDateOnly(firstMsg.time || 'New'),
-              shortDescription: `Email: ${firstMsg.text.substring(0, 50)}...`,
+              shortDescription: firstMsg['Work note'] || firstMsg['Short Description'] || firstMsg['shortDescription'] || firstMsg.Description || firstMsg.description || `Email: ${firstMsg.text.substring(0, 50)}...`,
               unread: 0,
               lastMessage: lastNonEmptyMsg ? lastNonEmptyMsg.text : '',
               lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : '',
@@ -279,7 +279,27 @@ export function CasesProvider({ children }) {
           }
         });
 
-        setCases(allFormattedCases);
+        setCases(prevCases => {
+          return allFormattedCases.map(newCase => {
+            const oldCase = prevCases.find(p => p.id === newCase.id);
+            if (oldCase) {
+              const localMsgs = oldCase.messages.filter(m => m.isLocal);
+              if (localMsgs.length > 0) {
+                const mergedMsgs = [...newCase.messages, ...localMsgs].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                const lastMsg = mergedMsgs[mergedMsgs.length - 1];
+                const lastNonEmptyMsg = [...mergedMsgs].reverse().find(m => m.text && m.text.trim() !== '') || lastMsg;
+                return {
+                  ...newCase,
+                  messages: mergedMsgs,
+                  lastMessage: lastNonEmptyMsg ? (lastNonEmptyMsg.from === 'agent' ? `You: ${lastNonEmptyMsg.text}` : lastNonEmptyMsg.text) : newCase.lastMessage,
+                  lastMessageTime: lastNonEmptyMsg ? lastNonEmptyMsg.time : newCase.lastMessageTime,
+                  lastMessageTimestamp: lastMsg ? lastMsg.timestamp : newCase.lastMessageTimestamp
+                };
+              }
+            }
+            return newCase;
+          });
+        });
       } catch (err) {
         console.error("Google Sheets API Error:", err);
         setError(err.message);
@@ -308,9 +328,10 @@ export function CasesProvider({ children }) {
         c.id === id
           ? {
             ...c,
-            messages: [...c.messages, message],
+            messages: [...c.messages, { ...message, isLocal: true, timestamp: Date.now() }],
             lastMessage: message.from === 'agent' ? `You: ${message.text}` : message.text,
             lastMessageTime: message.time,
+            lastMessageTimestamp: Date.now(),
           }
           : c
       )

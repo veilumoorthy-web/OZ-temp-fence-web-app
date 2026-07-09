@@ -187,9 +187,13 @@ export default function CaseDetail() {
         const payload = {
           caseId: c.id,
           status: c.status,
+          State: c.status,
           priority: c.priority,
+          Priority: c.priority,
           assignee: c.assignee,
-          shortDescription: c.shortDescription
+          'Assigned to': c.assignee,
+          shortDescription: c.shortDescription,
+          'Work note': c.shortDescription
         }
         const res = await fetch(webhookUrl, {
           method: 'POST',
