@@ -48,7 +48,6 @@ export default function CaseDetail() {
   const [isSending, setIsSending] = useState(false)
   const [toast, setToast] = useState(null)
   const [customerEmail, setCustomerEmail] = useState('')
-  const [subject, setSubject] = useState('')
 
   useEffect(() => {
     const c = (cases || []).find((x) => x.id === id)
@@ -93,7 +92,6 @@ export default function CaseDetail() {
           agent: 'Agent',
           channel: 'email',
           customerEmail,
-          subject,
         }
 
         let res
@@ -241,7 +239,7 @@ export default function CaseDetail() {
             <button className="btn-outline" onClick={() => navigate('/inbox')}>
               Back to inbox
             </button>
-            {c.channel !== 'email' && (
+            {(!c.channel || !['email', 'gmail'].includes(c.channel.toLowerCase())) && (
               <button className="btn-outline" onClick={() => navigate(`/chat/${c.id}`)}>
                 💬 Customer Chat
               </button>
@@ -301,7 +299,7 @@ export default function CaseDetail() {
         {tab === 'Activity' ? (
           <div className="activity-panel">
             <div className="reply-mode-tabs">
-              {c.channel !== 'email' && (
+              {(!c.channel || !['email', 'gmail'].includes(c.channel.toLowerCase())) && (
                 <button
                   className={replyMode === 'Reply to customer' ? 'reply-tab-active' : ''}
                   onClick={() => setReplyMode('Reply to customer')}
@@ -321,15 +319,6 @@ export default function CaseDetail() {
             </div>
 
             <div className={`reply-input-row ${replyMode === 'Reply via Gmail' ? 'reply-input-row--gmail-container' : ''}`} style={replyMode === 'Reply via Gmail' ? { flexDirection: 'column', alignItems: 'stretch', gap: '10px' } : {}}>
-              {replyMode === 'Reply via Gmail' && (
-                <input
-                  className="reply-subject-input"
-                  placeholder="Subject"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '4px', fontFamily: 'inherit' }}
-                />
-              )}
               <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'center' }}>
                 {replyMode !== 'Reply via Gmail' && <span className="phone-clip"></span>}
                 <textarea
